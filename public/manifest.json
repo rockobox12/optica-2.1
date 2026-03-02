@@ -1,0 +1,23 @@
+{
+  "name": "Óptica Istmeña Suite",
+  "short_name": "OpticaIst",
+  "description": "Portal de pacientes - Óptica Istmeña",
+  "start_url": "/portal",
+  "display": "standalone",
+  "background_color": "#1F2937",
+  "theme_color": "#1F2937",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["health", "medical"]
+}

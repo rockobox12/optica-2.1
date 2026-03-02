@@ -1,0 +1,1159 @@
+===================================================================
+PROMPTS COMPLETOS — ÓPTICA ISTMEÑA SUITE V2.01
+Guía paso a paso para reconstruir el sistema idéntico en Lovable.
+Copiar y pegar cada prompt en orden en un proyecto NUEVO.
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 0: PREPARACIÓN DEL PROYECTO                            ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea un proyecto nuevo en Lovable. Antes de pegar el primer prompt:
+1. Habilita Lovable Cloud (backend integrado)
+2. Asegúrate de tener React + TypeScript + Vite + Tailwind configurado (default en Lovable)
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 1: CONFIGURACIÓN BASE Y DESIGN SYSTEM                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Voy a construir un sistema administrativo completo para una cadena de ópticas en México llamada "Óptica Istmeña". Necesito que configures la base del proyecto:
+
+1. IDENTIDAD:
+   - Nombre: "Óptica Istmeña Suite"
+   - Versión: V2.01
+   - Developer: "Rockobox" (© 2026)
+   - Lema: "Precio, Calidad y Garantía"
+   - País: México (MXN, zona horaria America/Mexico_City)
+
+2. ARCHIVO src/config/app.ts:
+   Crea un APP_CONFIG con nombre, versión, developer, slogan, y configuración general.
+
+3. INSTALAR DEPENDENCIAS:
+   - @tanstack/react-query v5
+   - react-router-dom v6
+   - framer-motion
+   - jspdf + html2canvas
+   - recharts
+   - react-hook-form + @hookform/resolvers + zod
+   - date-fns
+   - lucide-react
+   - sonner
+   - @hello-pangea/dnd
+   - react-markdown
+   - Todos los componentes shadcn/ui base
+
+4. DESIGN SYSTEM (index.css + tailwind.config.ts):
+   Paleta corporativa en HSL:
+   - Primary: 206 59% 44% (#2E7BB4) — botones principales
+   - Accent: 209 78% 28% (#0F4C81) — azul corporativo profundo
+   - Secondary: 195 47% 94% (#E8F4F8) — fondos claros
+   - Success: 160 84% 39% (#10B981)
+   - Warning: 38 92% 50% (#F59E0B)
+   - Destructive: 0 84% 60% (#EF4444)
+   - AI: 258 90% 66% (#8B5CF6)
+   - Background: 220 14% 96% (#F3F4F6)
+   - Foreground: 215 28% 17% (#1F2937)
+   - Sidebar: tema oscuro #1F2937
+
+   Fuentes:
+   - Display/headings: "Plus Jakarta Sans" (font-display)
+   - Body: "Inter" (font-sans)
+
+   Border radius: 0.625rem (10px)
+   Sombras con variables CSS (--shadow-sm, --shadow-md, --shadow-lg)
+
+   NUNCA usar colores directos en componentes, siempre tokens semánticos.
+
+5. REGLAS UI/UX:
+   - NUNCA usar height: 100vh → usar h-[100dvh] en móviles
+   - SIN scroll horizontal → overflow-x-hidden global
+   - Touch: touch-action: pan-x pan-y, -webkit-overflow-scrolling: touch
+   - Safe areas iOS
+   - Inputs en móvil: font-size mínimo 16px
+   - Z-index: Sidebar(40), POS Modal(60), Diálogos(70), Alertas(80), Popovers(9999)
+   - Estilo móvil compacto (.mobile-compact)
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 2: BASE DE DATOS — TABLAS CORE                         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea las siguientes tablas en la base de datos con RLS habilitado en TODAS:
+
+1. ENUM app_role: 'super_admin', 'admin', 'gerente', 'doctor', 'optometrista', 'asistente', 'cobrador', 'tecnico'
+
+2. TABLA profiles:
+   - id UUID PK default gen_random_uuid()
+   - user_id UUID UNIQUE NOT NULL (referencia a auth.users)
+   - full_name TEXT
+   - email TEXT
+   - phone TEXT
+   - birth_date DATE
+   - is_active BOOLEAN default true
+   - default_branch_id UUID FK → branches (nullable)
+   - avatar_url TEXT
+   - created_at, updated_at TIMESTAMPTZ
+
+3. TABLA user_roles:
+   - id UUID PK
+   - user_id UUID NOT NULL
+   - role app_role NOT NULL
+   - branch_id UUID FK → branches (nullable)
+   - created_at TIMESTAMPTZ
+   UNIQUE(user_id, role)
+
+4. TABLA branches:
+   - id UUID PK
+   - name TEXT NOT NULL
+   - code TEXT (auto-generado: SUC001, SUC002...)
+   - address, city, state, colony, zip_code TEXT
+   - phone, email, whatsapp_number TEXT
+   - is_main BOOLEAN default false
+   - is_active BOOLEAN default true
+   - manager TEXT
+   - created_at, updated_at TIMESTAMPTZ
+
+5. FUNCIONES RPC (SECURITY DEFINER):
+   - has_role(user_id UUID, role app_role) → BOOLEAN (admin incluye super_admin)
+   - is_super_admin() → BOOLEAN
+   - can_access_branch(branch_id UUID) → BOOLEAN
+   - current_user_branch_id() → UUID
+   - set_user_roles(target_user_id UUID, roles_json JSONB) → void
+
+6. TRIGGER handle_new_user:
+   - Al crear usuario en auth.users, crear profile automáticamente
+   - Extraer nombre del email si no hay metadata
+
+7. TRIGGER ensure_single_main_branch:
+   - Solo puede haber 1 sucursal con is_main = true
+
+8. RLS POLICIES:
+   - profiles: usuarios ven su propio perfil, admin ve todos
+   - user_roles: usuarios ven sus roles, admin gestiona todos
+   - branches: todos leen, admin modifica
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 3: BASE DE DATOS — TABLAS OPERATIVAS                   ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea las tablas operativas principales:
+
+1. TABLA patients:
+   - id UUID PK
+   - first_name, last_name TEXT NOT NULL
+   - birth_date DATE, gender TEXT
+   - curp, rfc TEXT
+   - phone, mobile, whatsapp, email TEXT
+   - phone_e164 TEXT (auto via trigger normalize_phone_mx)
+   - address, city, state, zip_code, colony TEXT
+   - latitude NUMERIC, longitude NUMERIC
+   - occupation, blood_type TEXT
+   - medical_notes, allergies, pathologies TEXT
+   - referred_by UUID FK → promotors
+   - branch_id UUID FK → branches NOT NULL
+   - origin_branch_id UUID FK → branches
+   - is_active BOOLEAN default true
+   - is_deleted BOOLEAN default false
+   - status TEXT default 'active' ('active'|'archived')
+   - deleted_at, deleted_by, deleted_reason
+   - archived_at, archived_by, archive_reason
+   - payment_probability_score INTEGER (0-100)
+   - payment_risk_level TEXT
+   - loyalty_points INTEGER default 0
+   - created_at TIMESTAMPTZ, created_by UUID
+
+2. TABLA products:
+   - id UUID PK
+   - sku TEXT (auto: PRD-000001)
+   - name, description TEXT
+   - category_id UUID FK → product_categories
+   - brand, model, material, color, size TEXT
+   - purchase_price, sale_price NUMERIC
+   - min_stock, max_stock, reorder_point INTEGER
+   - is_active BOOLEAN, is_service BOOLEAN
+   - barcode TEXT
+
+3. TABLA product_categories:
+   - id UUID PK, name TEXT, description TEXT, parent_id UUID (self-ref)
+
+4. TABLA inventory:
+   - id UUID PK
+   - product_id FK → products, branch_id FK → branches
+   - quantity INTEGER, updated_at TIMESTAMPTZ
+   UNIQUE(product_id, branch_id)
+
+5. TABLA inventory_movements:
+   - Tipos: 'entrada', 'salida', 'venta', 'devolucion', 'ajuste', 'transferencia'
+   - product_id, branch_id, quantity, previous_stock, new_stock
+   - unit_cost, total_cost, reference_type, reference_id
+   - transfer_branch_id, created_by, notes
+
+6. TABLA product_prices_by_branch:
+   - product_id, branch_id, price, is_active
+   UNIQUE(product_id, branch_id)
+
+7. TABLA promotors:
+   - id UUID PK, name TEXT, phone TEXT, email TEXT
+   - zone TEXT, is_active BOOLEAN, branch_id UUID FK
+
+8. RLS: branch_id filtering con can_access_branch() en todas las tablas.
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 4: BASE DE DATOS — VENTAS Y CRÉDITO                    ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea las tablas de ventas y crédito:
+
+1. ENUM sale_status: 'pending', 'partial', 'completed', 'cancelled', 'refunded'
+
+2. TABLA sales:
+   - id UUID PK
+   - sale_number TEXT (auto: VTA-YYYYMM-000001 via sequence)
+   - patient_id FK → patients, branch_id FK → branches
+   - seller_id UUID, prescription_id FK → patient_prescriptions (nullable)
+   - subtotal, discount_amount, tax_amount, total NUMERIC
+   - amount_paid, balance NUMERIC
+   - status sale_status default 'pending'
+   - is_credit BOOLEAN default false
+   - credit_due_date DATE, next_payment_date DATE, next_payment_amount NUMERIC
+   - promotor_id FK → promotors
+   - total_profit NUMERIC
+   - notes TEXT
+   - created_at, updated_at TIMESTAMPTZ
+
+3. TABLA sale_items:
+   - sale_id FK, product_id FK
+   - product_name, product_sku TEXT
+   - quantity INTEGER, unit_price, discount_percent, discount_amount, subtotal NUMERIC
+   - cost_price, profit_amount NUMERIC
+   - package_id UUID FK → packages (nullable)
+
+4. TABLA sale_payments:
+   - sale_id FK
+   - payment_method TEXT ('cash'|'card'|'transfer'|'check'|'credit')
+   - amount NUMERIC, reference TEXT
+
+5. TABLA credit_payments:
+   - sale_id FK, amount NUMERIC
+   - payment_method, reference TEXT
+   - payment_number INTEGER
+   - received_by UUID
+   - is_voided BOOLEAN, voided_at, voided_by, voided_reason
+
+6. TABLA payment_plans:
+   - sale_id FK, total_amount, down_payment NUMERIC
+   - num_installments INTEGER, installment_amount NUMERIC
+   - frequency TEXT ('weekly'|'biweekly'|'monthly')
+   - start_date DATE, status TEXT
+
+7. TABLA payment_plan_installments:
+   - payment_plan_id FK
+   - installment_number, due_date, amount, paid_amount
+   - status ('pending'|'paid'|'overdue'|'partial')
+   - days_overdue INTEGER, paid_at TIMESTAMPTZ
+
+8. SEQUENCES:
+   - sale_number_seq para auto-generar VTA-YYYYMM-XXXXXX
+   - prescription_number_seq para RX-YYYYMM-XXXXX
+   - product_sku_seq para PRD-XXXXXX
+
+9. TRIGGERS:
+   - update_sale_totals: recalcula totales al insertar/actualizar sale_items
+   - Función get_effective_price(product_id, branch_id): retorna precio con override por sucursal
+
+10. RLS con branch_id filtering en todas.
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 5: BASE DE DATOS — CLÍNICO Y LABORATORIO               ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea las tablas clínicas y de laboratorio:
+
+1. TABLA visual_exams:
+   - id UUID PK
+   - patient_id FK → patients, branch_id FK → branches
+   - created_by UUID
+   - exam_date DATE
+   - od_sphere, od_cylinder NUMERIC, od_axis INTEGER
+   - od_add NUMERIC, od_av TEXT, od_dnp NUMERIC
+   - oi_sphere, oi_cylinder NUMERIC, oi_axis INTEGER
+   - oi_add NUMERIC, oi_av TEXT, oi_dnp NUMERIC
+   - od_near_av, oi_near_av TEXT
+   - diagnosis, notes, recommendations TEXT
+   - screening_data JSONB, visual_profile JSONB
+
+2. TABLA patient_prescriptions:
+   - id UUID PK
+   - prescription_number TEXT (auto: RX-YYYYMM-00001)
+   - patient_id FK, visual_exam_id FK, branch_id FK
+   - prescribed_by UUID
+   - od_sphere, od_cylinder NUMERIC, od_axis INTEGER, od_add NUMERIC
+   - oi_sphere, oi_cylinder NUMERIC, oi_axis INTEGER, oi_add NUMERIC
+   - lens_type, material, coating, observations TEXT
+   - expiry_date DATE
+   - status TEXT ('active'|'used'|'expired')
+
+3. TABLA lab_orders:
+   - id UUID PK
+   - order_number TEXT
+   - patient_id FK, sale_id FK, prescription_id FK, branch_id FK
+   - status TEXT: 'PENDIENTE' → 'EN_PROCESO' → 'EN_LABORATORIO' → 'LISTO_PARA_ENTREGA' → 'ENTREGADO'
+   - location TEXT: 'EN_OPTICA' | 'EN_LABORATORIO'
+   - lab_name, lab_notes TEXT
+   - lens_type, material, coating, treatment TEXT
+   - od_sphere, od_cylinder, od_axis, od_add (snapshot de prescripción)
+   - oi_sphere, oi_cylinder, oi_axis, oi_add
+   - estimated_date DATE, delivered_at TIMESTAMPTZ
+   - created_by UUID
+
+4. TABLA add_clinical_config (singleton):
+   - add_min, add_max, add_step NUMERIC
+   - edad_minima_add INTEGER
+   - mostrar_sugerencia_add BOOLEAN
+
+5. TABLA add_age_suggestions:
+   - min_age, max_age INTEGER, suggested_add NUMERIC
+
+6. TRIGGER validate_lab_order_status_location para validar transiciones de estado.
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 6: BASE DE DATOS — CAJA, AGENDA Y EXTRAS               ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Crea las tablas restantes:
+
+1. TABLA cash_registers (sesiones de caja):
+   - branch_id FK, opened_by UUID, opening_amount NUMERIC
+   - closed_by UUID, closing_amount, closing_date
+   - expected_amount, difference NUMERIC
+   - status TEXT ('open'|'closed')
+
+2. TABLA cash_movements:
+   - cash_register_id FK, sale_id FK (nullable)
+   - movement_type TEXT ('income'|'expense'|'adjustment')
+   - payment_method TEXT, amount NUMERIC, description TEXT
+   - created_by UUID
+
+3. TABLA cash_counts (arqueos):
+   - bills_20, bills_50, bills_100, bills_200, bills_500, bills_1000 INTEGER
+   - coins_50c, coins_1, coins_2, coins_5, coins_10, coins_20 INTEGER
+   - total_counted, expected_amount, difference NUMERIC
+   - count_type TEXT, counted_by UUID
+
+4. TABLA bank_accounts y bank_transactions
+
+5. ENUMS de appointment:
+   - appointment_type: 'consulta', 'entrega', 'seguimiento', 'emergencia', 'otro'
+   - appointment_status: 'scheduled', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'
+
+6. TABLA appointments:
+   - patient_id FK, doctor_id UUID, branch_id FK
+   - appointment_date DATE, start_time TIME, end_time TIME
+   - appointment_type, status
+   - reason, notes TEXT
+   - sale_id FK, lab_order_id FK (para entregas)
+   - delivery_responsible_user_id UUID
+   - booking_source TEXT ('manual'|'portal'|'auto')
+
+7. TABLA doctor_schedules y blocked_slots
+
+8. TABLA notifications:
+   - user_id UUID, title, message TEXT
+   - type, priority TEXT
+   - is_read BOOLEAN, read_at TIMESTAMPTZ
+   - action_url, action_label TEXT
+   - expires_at TIMESTAMPTZ, metadata JSONB
+
+9. TABLA drafts (borradores):
+   - user_id, branch_id, form_type TEXT, entity_id TEXT
+   - draft_data JSONB, status TEXT ('ACTIVE'|'USED'|'DISCARDED')
+
+10. TABLA access_logs (bitácora)
+
+11. TABLAS de configuración:
+    - company_settings (singleton): nombre, slogan, teléfono, dirección
+    - credit_settings (singleton): min_down_payment_percent (default 20), max_installments
+
+12. TABLAS de marketing:
+    - marketing_campaigns, campaign_messages, campaign_recipients
+    - campaign_templates, ai_campaign_segments
+    - customer_loyalty_points, loyalty_settings
+
+13. TABLAS de comisiones:
+    - promotor_commission_config, promotor_comisiones
+
+14. TABLAS de mensajería automática:
+    - auto_message_templates, auto_message_logs
+
+15. TABLA patient_portal_tokens (OTP login)
+
+16. TABLA admin_authorization_requests y admin_reset_otp
+
+17. TABLA stock_alerts
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 7: AUTENTICACIÓN Y LAYOUT                              ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el sistema de autenticación y layout principal:
+
+1. HOOK useAuth:
+   - Login con email/password
+   - Signup con verificación de email
+   - signOut con confirmación
+   - Gestión de roles: hasRole, hasAnyRole, isAdmin, isSuperAdmin
+   - rolesLoaded, profileLoaded flags
+   - Cargar profile y roles al iniciar sesión
+
+2. PÁGINA /auth:
+   - Login form profesional con email + password
+   - Toggle signup/login
+   - Redirect a / después de login exitoso
+   - Diseño centrado con logo de la óptica
+
+3. COMPONENTES DE AUTH:
+   - ProtectedRoute: wrapper que verifica sesión + roles + perfil activo
+   - RoleGuard: oculta contenido según rol
+   - UnauthorizedScreen: pantalla para usuarios sin permisos
+   - LoadingScreen: spinner de carga con mensaje
+
+4. MAINLAYOUT:
+   - Sidebar fijo izquierda (260px desktop, 70px tablet colapsado)
+   - Sidebar oscuro (#1F2937) con:
+     * Logo: icono Eye en cuadrado azul redondeado
+     * Título "Óptica Istmeña" + subtítulo "Suite Admin"
+     * 22 items de navegación en orden exacto (ver MAPA DE RUTAS del SEED PROMPT)
+     * Cada item con icono de Lucide
+     * Botón de colapsar
+     * Tooltips en estado colapsado
+   - Header fijo arriba:
+     * Selector de sucursal (BranchProvider)
+     * Badge de notificaciones
+     * Menú de perfil con logout
+   - Footer con "Desarrollado por Rockobox" (solo desktop)
+
+5. MOBILENAV:
+   - Barra fija abajo con 5 tabs: Inicio (Home), Agenda (CalendarDays), Expediente (FileText), Ventas (ShoppingCart), Más (Menu)
+   - "Más" abre un drawer con el menú completo
+
+6. HOOKS:
+   - useBreakpoint(): retorna 'mobile' | 'tablet' | 'desktop'
+   - useIsMobile(): boolean
+   - useTouchScroll(): ref para scroll nativo en touch
+   - useIOSKeyboard(): evita zoom en inputs iOS
+
+7. BRANCH CONTEXT (BranchProvider):
+   - activeBranchId state
+   - branchFilter para queries
+   - Super admin: selector "Todas las sucursales" + individual
+   - Otros roles: solo su sucursal asignada
+
+8. ERROR HANDLING:
+   - ErrorBoundary component global
+   - ModuleErrorFallback: UI de error por módulo con botón retry
+
+9. PROVIDERS (orden de anidamiento en App.tsx):
+   ErrorBoundary > QueryClientProvider > AuthProvider > AuthorizationProvider > BranchProvider > TooltipProvider > Toaster + Sonner > BrowserRouter > Routes
+
+10. MAPA DE RUTAS COMPLETO (definir en App.tsx):
+    / → Dashboard (todos)
+    /dashboard-corporativo → CorporateDashboard (admin, gerente)
+    /agenda → Appointments (todos)
+    /expediente → Expediente (todos)
+    /herramienta-optometria → ClinicalModule (todos)
+    /ventas → Sales (todos)
+    /laboratorio → Laboratory (admin, gerente, doctor, asistente)
+    /oportunidades-clinicas → OportunidadesClinicas (admin, gerente, doctor)
+    /inventario → Inventory (admin, gerente, doctor, asistente)
+    /compras → Purchases (admin, gerente)
+    /cobro-rapido → CobroRapido (admin, gerente, cobrador, asistente)
+    /credito-cobranza → CreditCollection (admin, gerente, cobrador)
+    /caja → CashRegister (todos)
+    /marketing → Marketing (admin, gerente)
+    /reportes → Reports (admin, gerente)
+    /promotores → Promotores (admin, gerente)
+    /comisiones → Comisiones (admin, gerente)
+    /comercial → Commercial (admin, gerente)
+    /sucursales → BranchesManagement (admin)
+    /usuarios → UsersManagement (todos)
+    /bitacora → AccessLogs (admin)
+    /configuracion → Configuration (admin)
+    Aliases: /pacientes, /expediente-clinico, /clinico → /expediente
+
+11. ROL TÉCNICO: sidebar solo muestra 7 items (Inicio, Agenda, Expediente, Ventas, Herramienta Optometría, Caja, Usuarios)
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 8: DASHBOARD                                           ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el Dashboard principal (/):
+
+1. HOOK useDashboardMetrics:
+   - Consulta datos REALES de Supabase (NO mock)
+   - KPIs del día: Ventas del Día (MXN), Clientes Atendidos, Órdenes Pendientes, Exámenes Hoy
+   - Cambio % vs ayer
+   - Filtro por branch_id activo
+
+2. COMPONENTE StatCard:
+   - Icono, título, valor principal, cambio % con color (verde positivo, rojo negativo)
+   - Animación de entrada con framer-motion
+
+3. PARA ROL TÉCNICO:
+   - SOLO mostrar los 4 StatCards, nada más
+   - Sin gráficas, sin widgets, sin panels
+
+4. PARA ADMIN/GERENTE (además de los 4 KPIs):
+   - MonthlySalesChart: gráfica de ventas mensual (Recharts BarChart)
+   - TopProductsChart: productos más vendidos
+   - SalesByCategoryChart: ventas por categoría (PieChart)
+   - SalesByBranchChart: comparativa entre sucursales
+   - DeliveryWidget: entregas pendientes/próximas
+   - CreditWidget: resumen de créditos activos
+   - PromotorWidget: top promotores del mes
+   - QuickActions: accesos directos (Nueva Venta, Nuevo Paciente, etc.)
+   - RecentSales: últimas ventas del día
+   - GlobalExecutivePanel: panel ejecutivo global
+   - ClinicalExecutivePanel: métricas clínicas
+
+5. Formato MXN: $1,234.00
+6. Fechas en español con date-fns locale es
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 9: EXPEDIENTE Y PACIENTES                              ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de Expediente (/expediente):
+
+1. PÁGINA PRINCIPAL:
+   - PatientTable: tabla paginada (50 por página) con búsqueda
+   - Búsqueda tokenizada case-insensitive (por nombre, apellido, teléfono)
+   - Botón "Nuevo Paciente"
+   - Click en fila abre ExpedienteDetail
+
+2. PATIENTFORM (Sheet lateral):
+   - Modo móvil: fullscreen
+   - Tabs: Datos Personales | Contacto | Dirección | Clínico
+   - Datos Personales: nombre, apellido, fecha nacimiento (BirthDatePicker con Smart Date Input que acepta dd/mm/yyyy, ddmmyyyy, etc.), género, CURP, RFC
+   - Contacto: teléfono, WhatsApp (formato +52), email
+   - Dirección: calle, colonia, ciudad, estado, CP, geolocalización (LocationPicker)
+   - Clínico: notas médicas, alergias, patologías, tipo sangre
+   - Selector de promotor/referido con default "Óptica Istmeña (llegó solo)"
+   - Auto Title Case en nombres
+   - Detección de duplicados (nombre + fecha nacimiento)
+   - Persistencia de borrador (drafts table)
+   - Validación con zod
+   - Auto-asigna branch_id
+
+3. EXPEDIENTEDETAIL:
+   - Vista completa del paciente
+   - Tabs: General | Historial Clínico | Ventas | Prescripciones | Contacto
+   - Botones: Nuevo Examen, Editar, WhatsApp, Eliminar
+   - Historial de exámenes visuales
+   - Historial de ventas
+   - Prescripciones activas
+   - Badge de crédito si tiene deuda
+   - Badge corporativo si aplica
+
+4. RESTRICCIONES TÉCNICO:
+   - Solo ve pacientes atendidos HOY por él (where created_by = auth.uid() AND created_at >= hoy)
+   - Búsqueda opera solo sobre su lista
+   - Post-corte de caja: lista vacía
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 10: EXAMEN VISUAL Y HERRAMIENTA OPTOMETRÍA             ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo clínico:
+
+1. UNIFIEDEXAMFORM (desde ExpedienteDetail):
+   - Tabs: Refracción | Receta | Diagnóstico | Screening Visual
+   - Datos por ojo (OD/OI):
+     * Esfera: -30.00 a +30.00 (paso 0.25)
+     * Cilindro: -10.00 a +10.00 (paso 0.25)
+     * Eje: 0 a 180 grados
+     * ADD: 0.50 a 4.00 (paso 0.25)
+     * Agudeza Visual lejos y cerca (20/20, 20/25, etc.)
+     * DNP en mm
+   - Sugerencia automática de ADD por edad (tabla add_age_suggestions)
+   - Validación clínica en tiempo real (errores como ADD sin esfera, cilindro sin eje)
+   - Indicador visual de cambio de graduación vs examen anterior
+   - Paneles IA opcionales: DiagnosisPanel, ClinicalAlertsPanel, PredictiveClinicPanel, VisualProfilePanel
+   - Al guardar: crea registro en visual_exams + patient_prescriptions
+   - Botón "Ir a Venta" → navega a /ventas?fromExam=true&patientId=X
+
+2. HERRAMIENTA OPTOMETRÍA (/herramienta-optometria):
+   - TranspositionCalculator: convierte entre cilindro positivo y negativo
+   - ContactLensCalculator: conversión a lentes de contacto
+   - DigitalPrescription: genera receta digital en PDF (PrescriptionPDF)
+   - La receta incluye datos de la Dra. Belem Castillejos Valle
+
+3. COMPONENTES DE INPUT CLÍNICO:
+   - OpticalValueInput: input numérico para valores ópticos con ±0.25
+   - AxisInput: input circular 0-180°
+   - AdditionInput: input de ADD con sugerencia por edad
+   - VisualAcuitySelect: selector de agudeza visual
+   - GraduationChangeIndicator: muestra diferencia con examen anterior
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 11: POS / VENTAS                                       ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de ventas (/ventas):
+
+1. PÁGINA SALES:
+   - Historial de ventas (SalesHistory) con búsqueda y filtros
+   - Botón "Nueva Venta" abre POSTerminal
+
+2. POSTERMINAL (modal fullscreen z-[60]):
+   - Backdrop blur
+   - CashSessionGuard: si no hay caja abierta, muestra mensaje y botón a /caja
+   
+3. FLUJO POS:
+   Paso 1 — PACIENTE:
+   - CustomerSelector: buscar paciente existente o crear nuevo rápido
+   - Si viene de examen (?fromExam=true&patientId=X), auto-selecciona paciente
+   - PrescriptionBanner: muestra prescripción activa si existe
+   - MorosoBlockModal: si el paciente tiene deuda vencida, bloquea la venta
+   - POSPatientIntelligence: info contextual del paciente
+   
+   Paso 2 — PRODUCTOS:
+   - ProductSearch: búsqueda con debounce
+   - ProductSelector: grid/lista de productos con precios
+   - PackageSelector: paquetes/combos
+   - Carrito (usePOSCart hook):
+     * Agregar/quitar/editar cantidad
+     * Precios por sucursal (get_effective_price)
+     * Descuentos por item
+     * Subtotal, descuento total, total
+   - PromotorSelector: asignar promotor para comisiones
+
+   Paso 3 — PAGO:
+   - PaymentPanel: métodos de pago
+     * Efectivo: con calculadora de cambio
+     * Tarjeta: con referencia
+     * Transferencia: con referencia
+     * Cheque: con referencia
+     * Crédito: abre CreditPaymentPlanModal
+   - Pagos mixtos (ej: parte efectivo + parte tarjeta)
+   - CreditPaymentPlanModal:
+     * Enganche mínimo configurable (default 20% de credit_settings)
+     * Frecuencia: semanal, quincenal, mensual
+     * Número de cuotas
+     * Calendario de pagos generado
+   - DeliveryScheduleModal: programar entrega (crea appointment tipo 'entrega')
+
+   Paso 4 — TICKET:
+   - Al completar venta, genera:
+     * Registro en sales + sale_items + sale_payments
+     * cash_movements en la caja activa
+     * Si crédito: payment_plan + installments
+     * Si tiene lab items: lab_order automática
+     * Comisión de promotor si aplica
+   - ThermalTicket: ticket térmico
+     * Anchos: 58mm y 80mm (configurable)
+     * Cabecera: "ÓPTICA ISTMEÑA" + slogan
+     * Datos del paciente
+     * Items con precio unitario y subtotal
+     * TOTAL centrado y destacado
+     * Sección "QUEJAS Y ACLARACIONES" con teléfono
+     * Separador: "--------------------------------"
+   - Desktop: window.print() con @media print CSS
+   - Móvil: genera PDF con html2canvas + jsPDF, botón "Abrir PDF"
+
+4. HOOK usePOSCart:
+   - items, addItem, removeItem, updateQuantity
+   - totals (subtotal, discount, total)
+   - selectedPatient, selectedPromotor
+   - clearCart, isDirty
+
+5. Confirmación al cerrar con carrito no vacío (UnsavedChangesDialog)
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 12: COBRO RÁPIDO Y CRÉDITO                             ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa Cobro Rápido (/cobro-rapido) y Crédito y Cobranza (/credito-cobranza):
+
+1. COBRO RÁPIDO:
+   - Tab "Cobrar Ahora":
+     * QuickPaymentSearch: busca créditos pendientes por nombre/teléfono/número de venta
+     * Lista de deudas con semáforo de urgencia:
+       - Verde: al corriente
+       - Amarillo: próximo a vencer (≤7 días)
+       - Rojo: vencido
+     * QuickPaymentModal: registra abono
+       - Monto, método de pago, referencia
+       - Registra credit_payment + cash_movement
+       - Actualiza balance de la venta
+     * VoidPaymentDialog: anular pago (solo admin)
+     * PaymentThermalTicket: ticket de abono
+   - Tab "Cobros Programados":
+     * ScheduledPaymentsList: pagos por cobrar próximos
+     * PaymentReminderButton: enviar recordatorio WhatsApp
+
+2. CRÉDITO Y COBRANZA:
+   - CreditScoring: scoring crediticio (0-100) basado en historial
+   - PaymentPlans: vista de planes de pago activos
+   - CollectionAssignments: asignación de clientes a cobradores
+   - CollectionVisits: registro de visitas de cobranza
+   - DelinquencyReport: reporte de morosidad con filtros
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 13: CAJA Y BANCOS                                      ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de Caja (/caja):
+
+1. HOOK useCashSession:
+   - Detecta sesión abierta del usuario en la sucursal activa
+   - openSession(initialAmount)
+   - closeSession(closingAmount, notes)
+   - currentSession, isOpen
+
+2. CashRegisterSession:
+   - Si no hay sesión: formulario de apertura con monto inicial
+   - Si hay sesión abierta: panel con resumen
+     * Monto de apertura
+     * Total de ingresos/egresos del día
+     * Balance esperado
+     * Lista de movimientos
+   - Botón "Cerrar Caja"
+
+3. CashCount (arqueo):
+   - Grid de billetes ($20, $50, $100, $200, $500, $1000)
+   - Grid de monedas ($0.50, $1, $2, $5, $10, $20)
+   - Total contado vs esperado
+   - Diferencia (sobrante/faltante)
+
+4. ExpenseManager:
+   - Registrar gastos/retiros de caja
+   - Tipo de gasto, monto, descripción
+
+5. BankAccounts:
+   - CRUD de cuentas bancarias
+   - Saldo actual, movimientos bancarios
+   - Conciliación de transacciones
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 14: LABORATORIO                                        ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de Laboratorio (/laboratorio):
+
+1. LabOrderKanban:
+   - 5 columnas: PENDIENTE → EN_PROCESO → EN_LABORATORIO → LISTO_PARA_ENTREGA → ENTREGADO
+   - Drag & drop con @hello-pangea/dnd
+   - Cards con datos del paciente, tipo de lente, fecha estimada
+   - Color-coded por estado
+   - Filtros por fecha, paciente, estado
+
+2. LabOrderDetail:
+   - Datos completos de la orden
+   - Prescripción asociada
+   - Historial de cambios de estado
+   - Tracking de ubicación (EN_OPTICA / EN_LABORATORIO)
+   - Botón de WhatsApp al paciente
+   - Botón de imprimir orden
+
+3. LabOrderForm:
+   - Crear orden manual (normalmente se auto-genera desde POS)
+   - Seleccionar paciente, prescripción, tipo de lente, laboratorio
+
+4. LabOrderTracking:
+   - Timeline visual de estados
+   - Fecha estimada de entrega
+
+5. LabOrderWhatsApp:
+   - Mensaje pre-formateado de estado al paciente
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 15: INVENTARIO                                         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de Inventario (/inventario):
+
+1. ProductList:
+   - Tabla paginada con búsqueda
+   - Filtros por categoría, estado, stock
+   - Badge de alerta si stock bajo
+
+2. ProductForm:
+   - CRUD completo de productos
+   - SKU auto-generado (PRD-XXXXXX)
+   - Categorías jerárquicas
+   - Precio de compra, precio de venta
+   - Stock mínimo, máximo, punto de reorden
+
+3. CategoryManager:
+   - CRUD de categorías con padre/hijo
+
+4. StockOverview:
+   - Vista de stock por sucursal
+   - Semáforo por niveles (agotado, bajo, normal, exceso)
+
+5. StockMovementForm:
+   - Tipos: entrada, salida, ajuste, transferencia entre sucursales
+   - Registra en inventory_movements, actualiza inventory
+
+6. Kardex:
+   - Historial de movimientos por producto
+   - Filtros por fecha, tipo, sucursal
+
+7. StockAlerts:
+   - Lista de alertas activas (stock bajo, agotado)
+   - Botón para resolver/ignorar
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 16: AGENDA Y CITAS                                     ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el módulo de Agenda (/agenda):
+
+1. AppointmentCalendar:
+   - Vista día y semana
+   - Slots por doctor según doctor_schedules
+   - Citas coloreadas por tipo (consulta, entrega, seguimiento, emergencia)
+   - Click en slot vacío → crear cita
+   - Click en cita → ver detalle
+
+2. AppointmentForm:
+   - Seleccionar paciente, doctor, tipo, fecha, hora
+   - Validar contra slots disponibles (get_available_slots RPC)
+   - Notas opcionales
+
+3. AppointmentDetails:
+   - Datos completos de la cita
+   - Cambiar estado: programada → confirmada → en atención → completada
+   - Cancelar con motivo
+   - Botón WhatsApp para confirmar/recordar
+
+4. DoctorScheduleManager:
+   - Configurar horarios por doctor y sucursal
+   - Día de la semana, hora inicio/fin, duración de slot
+   - Bloquear slots (vacaciones, reuniones)
+
+5. WaitingRoom:
+   - Lista de pacientes checked-in esperando
+   - Tiempo de espera
+   - Botón "Iniciar Consulta" → cambia a in_progress
+
+6. TodayDeliveries:
+   - Lista de entregas programadas para hoy
+   - Desde appointments donde tipo = 'entrega'
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 17: MÓDULOS ADMINISTRATIVOS                            ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa los módulos administrativos:
+
+1. COMPRAS (/compras):
+   - SupplierList + SupplierForm: CRUD proveedores
+   - SupplierProducts: productos por proveedor
+   - PurchaseOrderList + PurchaseOrderForm: órdenes de compra
+   - PurchaseOrderDetail: detalle con items
+   - ReceptionForm + ReceptionList: recepción de mercancía (actualiza inventario)
+
+2. PROMOTORES (/promotores):
+   - PromotorForm: CRUD de promotores/referidores
+   - Configuración de comisiones por promotor
+   - Lista de promotores con filtros
+   - Alertas de rendimiento
+
+3. COMISIONES (/comisiones):
+   - ComisionesWidget: resumen del periodo
+   - ComisionDetail: detalle por promotor y venta
+   - Filtros por periodo (YYYY-MM)
+
+4. COMERCIAL (/comercial):
+   - PackageManager + PackageForm: paquetes/combos de productos
+   - PromotionManager + PromotionForm: promociones activas
+   - BranchPricing: precios diferenciados por sucursal
+
+5. MARKETING (/marketing):
+   - CampaignManager: CRUD de campañas
+   - CampaignApprovalWorkflow: flujo de aprobación
+   - CampaignMetrics: métricas de campañas
+   - AICampaignGenerator: generador de campañas con IA
+   - AISegmentsList: segmentos inteligentes
+   - CustomerLoyalty + LoyaltyDashboard + LoyaltySettings: programa de lealtad
+   - AutomatedMessages: mensajes automáticos
+
+6. REPORTES (/reportes):
+   - SalesReport: reporte de ventas con filtros
+   - InventoryReport: reporte de inventario
+   - FinancialReport: reporte financiero
+   - CashRegisterReport: reporte de caja
+   - PatientAnalytics: análisis de pacientes
+   - LabOrdersReport: reporte de laboratorio
+   - PromotorReport: rendimiento de promotores
+   - TopProductsReport: productos más vendidos
+   - TrendAnalysis: tendencias
+   - ExecutiveDashboard: panel ejecutivo con gráficas
+   - ReportExporter: exportar a Excel/PDF
+   - ReportFiltersPanel: panel de filtros reutilizable
+
+7. USUARIOS (/usuarios):
+   - UserForm: CRUD usuarios con asignación de roles
+   - Listado de usuarios activos/inactivos
+   - Técnico: solo ve y edita su propio perfil + cambio de contraseña
+
+8. SUCURSALES (/sucursales):
+   - BranchForm + BranchManagement: CRUD de sucursales
+   - BranchUsers: usuarios asignados por sucursal
+
+9. BITÁCORA (/bitacora):
+   - AccessLogs: tabla de eventos de acceso (login, logout, acciones)
+
+10. CONFIGURACIÓN (/configuracion):
+    - CompanySettingsForm: datos de la empresa
+    - CreditSettingsForm: configuración de créditos
+    - PrinterSettingsForm: configuración de impresión (ancho de ticket)
+    - AddClinicalSettings: configuración clínica (ADD ranges)
+    - SystemPreferences: preferencias del sistema
+    - DatabaseResetSection: reset de BD (protegido con OTP)
+    - VersionChangelog: historial de versiones
+    - PatientPortalSettings: configuración del portal
+    - PaymentReminderSettings: recordatorios de pago
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 18: PORTAL DEL PACIENTE                                ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el Portal del Paciente (/portal):
+
+1. PortalLogin:
+   - Login con OTP por teléfono/WhatsApp
+   - Edge function patient-portal-otp genera y valida OTP
+   - Sin autenticación de Supabase Auth (independiente)
+   - PatientPortalProvider maneja el estado
+
+2. PortalHome:
+   - Dashboard del paciente con resumen
+   - Próxima cita, saldo pendiente, puntos de lealtad
+
+3. PortalSales:
+   - Historial de compras del paciente
+
+4. PortalBalance:
+   - Saldo de crédito pendiente
+   - Calendario de pagos
+
+5. PortalAppointments:
+   - Citas programadas
+   - Solicitar nueva cita
+
+6. PortalPoints:
+   - Puntos de lealtad acumulados
+   - Historial de puntos
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 19: EDGE FUNCTIONS E IA                                ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa las Edge Functions del backend:
+
+1. ai-assistant:
+   - Asistente IA general para el sistema
+   - Responde preguntas sobre operación, reportes, métricas
+   - Usa modelo de IA integrado de Lovable
+
+2. clinical-ai-chat:
+   - Chat IA especializado en optometría
+   - Analiza datos de exámenes visuales
+   - Sugiere diagnósticos y tratamientos
+   - Referencia a la Dra. Belem Castillejos Valle
+
+3. prescription-ai-validator:
+   - Valida prescripciones ópticas
+   - Detecta errores comunes (ADD sin esfera, valores fuera de rango)
+   - Sugiere correcciones
+
+4. campaign-ai-assistant:
+   - Genera contenido para campañas de marketing
+   - Sugiere segmentación de pacientes
+   - Crea templates de mensajes
+
+5. delivery-ai-assistant:
+   - Analiza y optimiza entregas
+   - Sugiere rutas y prioridades
+
+6. clinical-marketing-bridge:
+   - Conecta datos clínicos con oportunidades de marketing
+   - Identifica pacientes que necesitan seguimiento
+
+7. payment-reminders:
+   - Genera mensajes de recordatorio de pago
+   - Formato WhatsApp con datos de la deuda
+
+8. installment-reminders:
+   - Recordatorios de cuotas próximas a vencer
+
+9. send-auto-message:
+   - Envía mensajes automáticos según configuración
+
+10. patient-portal-otp:
+    - Genera OTP de 6 dígitos
+    - Valida OTP con intentos limitados y expiración
+    - Retorna token de sesión del portal
+
+11. create-admin:
+    - Crea el primer usuario administrador
+    - Solo funciona si no existen usuarios admin
+
+12. admin-reset-database:
+    - Reset de la base de datos (PELIGROSO)
+    - Protegido con verificación OTP
+    - Solo para super_admin
+
+Todas las funciones deben tener verify_jwt = false en config.toml.
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 20: NOTIFICACIONES Y SISTEMA DE AUTORIZACIÓN           ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Implementa el sistema de notificaciones y autorizaciones:
+
+1. NOTIFICACIONES:
+   - NotificationDropdown: dropdown en el header con badge de conteo
+   - Página /notificaciones: lista completa
+   - Hook useNotifications: fetch, markAsRead, count
+   - Tipos: info, warning, success, error
+   - Prioridad: low, medium, high, urgent
+
+2. SISTEMA DE AUTORIZACIÓN:
+   - AuthorizationProvider: contexto global
+   - useAdminAuthorization hook:
+     * checkAuthorization(actionType, resourceType, resourceId): para acciones que requieren aprobación admin
+     * Si el usuario ES admin: ejecuta directamente
+     * Si NO es admin: crea admin_authorization_request y espera aprobación
+   - AuthorizationRequestModal: muestra solicitudes pendientes
+   - AdminAuthorizationPanel: panel de admin para aprobar/rechazar
+   - AuthorizationNotificationBadge: badge con conteo de pendientes
+   - Acciones que requieren autorización:
+     * Anular pagos
+     * Eliminar pacientes
+     * Transferencias entre sucursales
+     * Cambios de precio
+
+3. BIRTHDAY GREETING:
+   - BirthdayGreeting: detecta cumpleaños de pacientes del día
+   - Muestra notificación con opción de enviar felicitación WhatsApp
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 21: COMPONENTES UI Y ANIMACIONES                       ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Asegúrate de tener estos componentes UI personalizados:
+
+1. COMPONENTES BASE:
+   - EnhancedSearch: buscador con debounce y tokenización
+   - PaginatedContainer: wrapper de paginación
+   - ConfirmDeleteDialog: diálogo destructivo con confirmación
+   - UnsavedChangesDialog: guard de cambios sin guardar
+   - ValidatedInput/ValidatedFormField: inputs con validación zod
+   - SmartDateInput/MaskedDateInput: input de fecha inteligente
+   - EnhancedFormControl: control de formulario mejorado
+   - LazyLoader: carga diferida con Suspense
+   - LoadingScreen: pantalla de carga
+   - ResponsiveTable: tabla adaptable a móvil
+
+2. ANIMACIONES (src/components/ui/animations/):
+   - AnimatedCheckmark: check animado para confirmaciones
+   - AnimatedCounter: contador numérico animado
+   - AnimatedInput: input con animación de enfoque
+   - AnimatedList: lista con animación de entrada escalonada
+   - LoadingStates: estados de carga variados
+   - MotionWrappers: wrappers de framer-motion reutilizables
+   - PulsingBadge: badge con efecto de pulso
+   - RippleButton: botón con efecto ripple
+   - ShakeWrapper: wrapper de animación shake para errores
+   - SkeletonShimmer: skeleton con efecto shimmer
+
+3. SKELETONS ESPECIALIZADOS:
+   - Skeletons para tabla, cards, formulario, dashboard
+
+===================================================================
+
+╔══════════════════════════════════════════════════════════════════╗
+║  PROMPT 22: PULIDO FINAL Y PWA                                 ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Ajustes finales:
+
+1. PWA:
+   - manifest.json con nombre, iconos, theme_color
+   - Service Worker básico (sw.js)
+   - Icono 192x192
+
+2. SEO:
+   - Título: "Óptica Istmeña Suite"
+   - Meta description
+   - favicon.ico
+   - robots.txt
+
+3. RESPONSIVE FINAL:
+   - Verificar iPhone 14 (390x844)
+   - Verificar iPad (768x1024)
+   - Verificar Desktop 1920x1080
+   - Sin scroll horizontal en ningún dispositivo
+   - Inputs ≥16px en móvil
+
+4. PERFORMANCE:
+   - Lazy loading con React.lazy + Suspense en todas las rutas
+   - ErrorBoundary en cada módulo
+   - React Query staleTime 30s
+   - Paginación máx 50 registros
+
+5. BRANDING:
+   - DeveloperWatermark: "Desarrollado por Rockobox" en footer desktop
+   - Versión widget en dashboard/configuración
+
+6. IMPRESIÓN:
+   - Estilos de impresión térmica centralizados
+   - Configuración local de impresora en localStorage
+
+===================================================================
+FIN DE PROMPTS — Total: 22 prompts para reconstruir el sistema completo.
+===================================================================

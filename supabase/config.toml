@@ -1,0 +1,31 @@
+project_id = "zuuhmqamwstmmlhlxgej"
+
+[functions.campaign-ai-assistant]
+verify_jwt = false
+
+[functions.ai-assistant]
+verify_jwt = false
+
+[functions.clinical-ai-assistant]
+verify_jwt = false
+
+[functions.clinical-marketing-bridge]
+verify_jwt = false
+
+[functions.create-admin]
+verify_jwt = false
+
+[functions.delivery-ai-assistant]
+verify_jwt = false
+
+[functions.clinical-ai-chat]
+verify_jwt = false
+
+[functions.installment-reminders]
+verify_jwt = false
+
+[functions.patient-portal-otp]
+verify_jwt = false
+
+[functions.admin-reset-database]
+verify_jwt = false

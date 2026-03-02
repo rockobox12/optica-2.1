@@ -1,0 +1,1 @@
+export { ClinicalMarketingBridge } from './ClinicalMarketingBridge';

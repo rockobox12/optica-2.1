@@ -1,0 +1,239 @@
+===================================================================
+SEED PROMPT — ÓPTICA ISTMEÑA SUITE V2.01
+Pegar este prompt en un proyecto NUEVO de Lovable para reconstruir
+el sistema completo. Ejecutar en fases para minimizar créditos.
+===================================================================
+
+CONTEXTO:
+Voy a construir un sistema administrativo completo para una cadena de ópticas en México llamada "Óptica Istmeña". El lema corporativo es "Precio, Calidad y Garantía". La especialista clínica de referencia es la Dra. Belem Castillejos Valle. El sistema se llama "Óptica Istmeña Suite" versión V2.01, developer "Rockobox" (© 2026).
+
+STACK OBLIGATORIO:
+- React 18 + TypeScript + Vite
+- Tailwind CSS + shadcn/ui (todos los componentes base)
+- TanStack React Query v5 para estado servidor
+- react-router-dom v6
+- framer-motion para animaciones
+- Lovable Cloud (Supabase) para backend, auth, DB, edge functions
+- jsPDF + html2canvas para impresión térmica y PDF
+- Recharts para gráficas
+- react-hook-form + zod para formularios
+- Fuentes: Inter (body) + Plus Jakarta Sans (display/headings)
+- date-fns para fechas (locale es)
+- Moneda: MXN (pesos mexicanos)
+
+DESIGN SYSTEM:
+- Paleta corporativa:
+  - Primary: HSL 206 59% 44% (#2E7BB4) — botones principales
+  - Accent: HSL 209 78% 28% (#0F4C81) — azul corporativo profundo
+  - Secondary: HSL 195 47% 94% (#E8F4F8) — fondos claros
+  - Success: HSL 160 84% 39% (#10B981)
+  - Warning: HSL 38 92% 50% (#F59E0B)
+  - Destructive: HSL 0 84% 60% (#EF4444)
+  - AI: HSL 258 90% 66% (#8B5CF6) — features de IA
+  - Background: HSL 220 14% 96% (#F3F4F6)
+  - Foreground: HSL 215 28% 17% (#1F2937)
+  - Sidebar: tema oscuro #1F2937
+- Border radius: 0.625rem (10px)
+- Sombras: usar variables CSS (--shadow-sm, --shadow-md, etc.)
+- NUNCA usar colores directos en componentes, siempre tokens semánticos
+
+REGLAS DE UI/UX ESTRICTAS:
+1. NUNCA usar height: 100vh → usar h-[100dvh] en móviles
+2. SIN scroll horizontal → overflow-x-hidden global
+3. Touch: touch-action: pan-x pan-y, -webkit-overflow-scrolling: touch
+4. Safe areas iOS: safe-area-left, safe-area-right
+5. Inputs en móvil: font-size mínimo 16px para evitar zoom iOS
+6. Z-index scale: Sidebar(40), POS Modal(60), Diálogos(70), Alertas(80), Popovers(9999)
+7. Estilo móvil compacto (.mobile-compact): padding 0.5rem, botones 36px, texto 0.6875rem
+8. NO inventar datos mock/demo para producción. Si no hay datos, mostrar estado vacío elegante
+
+ARQUITECTURA DE LAYOUT:
+- MainLayout: sidebar fijo izquierda (desktop/tablet) + header fijo arriba + contenido scrollable
+- Mobile (≤767px): sin sidebar, MobileNav fija abajo (5 items principales), pt-12 pb-16, padding 12px
+- Tablet (768-1023px): sidebar colapsado (70px), padding 16px
+- Desktop (≥1024px): sidebar expandible (260px/70px), padding 24px
+- Sidebar oscuro con icono Eye como logo, nombre "Óptica Istmeña" y subtítulo "Suite Admin"
+- Footer con crédito al developer en desktop
+
+RESPONSIVE:
+- Breakpoints via hook useBreakpoint() → 'mobile' | 'tablet' | 'desktop'
+- 3 columnas: useBreakpoint, useIsMobile (boolean), useTouchScroll
+- Usar useIOSKeyboard hook para evitar zoom en inputs iOS
+
+===================================================================
+FASE 1: FOUNDATION (ejecutar primero)
+===================================================================
+
+Crear la estructura base:
+
+1. CONFIGURACIÓN GLOBAL:
+   - src/config/app.ts con APP_CONFIG (nombre, versión, developer)
+   - Configurar index.css con TODA la paleta HSL (light + dark mode)
+   - Configurar tailwind.config.ts con colores semánticos, fuentes, animaciones, sombras
+
+2. AUTH:
+   - Tabla profiles (user_id, full_name, email, phone, birth_date, is_active, default_branch_id)
+   - Tabla user_roles (user_id, role, branch_id) con enum app_role
+   - Hook useAuth: login, signup, signOut, roles, hasRole, hasAnyRole, isAdmin, isSuperAdmin
+   - Función RPC has_role (SECURITY DEFINER) donde admin incluye super_admin
+   - Función RPC set_user_roles (SECURITY DEFINER)
+   - RLS en todas las tablas
+   - Trigger handle_new_user para crear profile automático
+   - Página /auth con login form profesional
+
+3. LAYOUT:
+   - MainLayout con sidebar + header + contenido
+   - Sidebar oscuro con navegación completa (ver MAPA DE RUTAS abajo)
+   - MobileNav para móvil (5 tabs: Inicio, Agenda, Expediente, Ventas, Más)
+   - Header con selector de sucursal (BranchProvider), notificaciones, perfil
+   - RoleGuard component para RBAC
+   - ProtectedRoute para rutas protegidas
+   - ErrorBoundary + ModuleErrorFallback
+
+4. SUCURSALES:
+   - Tabla branches con is_main, code auto-generado
+   - BranchProvider/useBranch hook con activeBranchId, branchFilter
+   - can_access_branch() y current_user_branch_id() RPCs
+   - Super admin: selector "Todas" + individual
+   - Otros: solo su sucursal asignada
+
+5. DASHBOARD (/ — Inicio):
+   - 4 StatCards: Ventas del Día (MXN), Clientes Atendidos, Órdenes Pendientes, Exámenes Hoy
+   - Datos reales desde Supabase (useDashboardMetrics hook)
+   - Para rol tecnico: SOLO los 4 KPIs, nada más
+   - Para admin: + gráficas (MonthlySalesChart, TopProducts, SalesByCategory, SalesByBranch)
+   - + Widgets: DeliveryWidget, CreditWidget, PromotorWidget, QuickActions, RecentSales
+   - + Paneles ejecutivos: GlobalExecutivePanel, ClinicalExecutivePanel
+
+MAPA DE RUTAS (sidebar, en este orden exacto):
+/ → Inicio (Home)
+/dashboard-corporativo → Dashboard Corporativo (admin, gerente)
+/agenda → Agenda (CalendarDays)
+/expediente → Expediente (FileText)
+/herramienta-optometria → Herramienta Optometría (Calculator)
+/ventas → Ventas (ShoppingCart)
+/laboratorio → Laboratorio (Package) — admin, gerente, doctor, asistente
+/oportunidades-clinicas → IA Oportunidades (Brain) — admin, gerente, doctor
+/inventario → Inventario (Glasses) — admin, gerente, doctor, asistente
+/compras → Compras (Truck) — admin, gerente
+/cobro-rapido → Cobro Rápido (Banknote) — admin, gerente, cobrador, asistente
+/credito-cobranza → Crédito y Cobranza (CreditCard) — admin, gerente, cobrador
+/caja → Caja y Bancos (Wallet)
+/marketing → Marketing (Gift) — admin, gerente
+/reportes → Reportes (BarChart3) — admin, gerente
+/promotores → Promotores (Megaphone) — admin, gerente
+/comisiones → Comisiones (DollarSign) — admin, gerente
+/comercial → Comercial (Package) — admin, gerente
+/sucursales → Sucursales (Building2) — admin
+/usuarios → Usuarios (UserCog)
+/bitacora → Bitácora (Shield) — admin
+/configuracion → Configuración (Settings) — admin
+
+Rutas sin sidebar:
+/auth, /notificaciones, /bienvenida, /portal/*
+
+Tecnico: solo ve Inicio, Agenda, Expediente, Ventas, Herramienta Optometría, Caja, Usuarios
+
+===================================================================
+FASE 2: PANTALLAS CRÍTICAS (ejecutar segundo)
+===================================================================
+
+1. PACIENTES (tabla patients):
+   - PatientForm: Sheet lateral, tabs (Datos, Contacto, Dirección, Clínico)
+   - Campos: nombre, apellido, nacimiento, género, CURP, RFC, teléfono, WhatsApp, email, dirección, geolocalización, notas médicas, alergias, promotor/referido
+   - Auto title-case nombres, detección de duplicados
+   - Persistencia de borrador (drafts table)
+   - PatientTable: tabla paginada con búsqueda tokenizada (nombre, apellido, teléfono)
+   - ExpedienteDetail: vista completa del paciente con historial clínico, ventas, prescripciones
+
+2. EXAMEN VISUAL (tabla visual_exams + patient_prescriptions):
+   - UnifiedExamForm: formulario completo refracción OD/OI
+   - Campos: esfera, cilindro, eje, ADD, agudeza visual (lejos/cerca), DNP
+   - Sugerencia de ADD por edad
+   - Validación clínica en tiempo real
+   - Indicador de cambio vs examen anterior
+   - Al guardar: crea visual_exam + prescription
+   - Botón "Ir a Venta" que navega a /ventas?fromExam=true&patientId=X
+
+3. POS / VENTAS:
+   - POSTerminal: modal fullscreen (z-60) con backdrop blur
+   - CashSessionGuard: requiere sesión de caja abierta
+   - Flujo: Paciente → Productos → Pago → Ticket
+   - Carrito con precios por sucursal
+   - Promotor selector con comisiones automáticas
+   - Pagos: efectivo, tarjeta, transferencia, cheque, crédito (mixtos)
+   - Plan de crédito con enganche mínimo configurable (default 20%)
+   - Bloqueo de morosos
+   - Al completar: genera sales, sale_items, sale_payments, cash_movements
+   - Ticket térmico (ThermalTicket): 58mm y 80mm
+   - Desktop: window.print() con CSS @media print
+   - Móvil: PDF con html2canvas + jsPDF, botón "Abrir PDF"
+
+4. COBRO RÁPIDO:
+   - Busca créditos pendientes por nombre/teléfono/número de venta
+   - Semáforo de urgencia (verde/amarillo/rojo por vencimiento)
+   - Modal de pago rápido
+   - Registra credit_payments + cash_movements
+   - Ticket de abono
+   - Tab: Cobros Programados
+
+===================================================================
+FASE 3: MÓDULOS SECUNDARIOS (ejecutar tercero)
+===================================================================
+
+Implementar estos módulos uno por uno:
+
+5. CAJA Y BANCOS: Sesiones de caja, apertura/cierre, arqueo de billetes/monedas, cuentas bancarias, movimientos
+6. LABORATORIO: Kanban de órdenes (PENDIENTE→EN_PROCESO→EN_LABORATORIO→LISTO→ENTREGADO), tracking de ubicación
+7. INVENTARIO: Productos, categorías, stock por sucursal, alertas, kardex, movimientos
+8. AGENDA: Calendario de citas, horarios por doctor, sala de espera, estados de cita
+9. HERRAMIENTA OPTOMETRÍA: Calculadora de transposición, lentes de contacto, receta digital
+10. CRÉDITO Y COBRANZA: Scoring crediticio, planes de pago, asignación de cobradores, reporte de morosidad
+11. COMPRAS: Órdenes de compra, proveedores, recepción de mercancía
+12. PROMOTORES: CRUD promotores, configuración de comisiones, alertas de rendimiento
+13. COMISIONES: Detalle y resumen de comisiones por periodo
+14. MARKETING: Campañas, segmentos IA, lealtad, templates
+15. REPORTES: Ventas, inventario, financiero, ejecutivo con filtros y exportación
+16. COMERCIAL: Paquetes y promociones
+17. CONFIGURACIÓN: Settings de empresa, crédito, impresora, clínico, preferencias
+18. USUARIOS: CRUD usuarios + roles. Técnico solo ve su perfil
+19. BITÁCORA: Logs de acceso
+20. SUCURSALES: CRUD sucursales
+21. NOTIFICACIONES: Sistema de notificaciones con badge
+22. PORTAL PACIENTE: Login OTP, historial de compras, saldo, citas, puntos
+
+===================================================================
+FASE 4: IA Y EDGE FUNCTIONS
+===================================================================
+
+23. Edge functions:
+    - ai-assistant: Asistente IA general
+    - clinical-ai-chat: Chat IA clínico
+    - prescription-ai-validator: Validador IA de recetas
+    - campaign-ai-assistant: IA para marketing
+    - delivery-ai-assistant: IA para entregas
+    - clinical-marketing-bridge: Puente clínico-marketing
+    - payment-reminders: Recordatorios de pago (WhatsApp)
+    - installment-reminders: Recordatorios de cuotas
+    - send-auto-message: Mensajes automáticos
+    - patient-portal-otp: OTP para portal
+    - create-admin: Crear primer admin
+    - admin-reset-database: Reset de BD (protegido con OTP)
+
+===================================================================
+REGLAS ESTRICTAS PARA TODAS LAS FASES:
+===================================================================
+
+1. NO inventar datos demo ni mock en producción. Si no hay datos, mostrar estado vacío
+2. TODA tabla debe tener branch_id y RLS policies
+3. Usar tokens semánticos de color, NUNCA colores directos
+4. Responsive: mobile-first, probar en iPhone 14 (390x844) e iPad (768x1024)
+5. Impresión: soporte 58mm y 80mm, config por localStorage
+6. Fechas: date-fns con locale es, formatos "dd/MM/yyyy" y "dd MMM yyyy"
+7. Moneda: MXN, formato $1,234.00
+8. Búsqueda: tokenizada, case-insensitive, normalizada (sin acentos)
+9. Cada módulo debe tener ErrorBoundary con ModuleErrorFallback
+10. Todas las listas: paginadas (máx 50 por página)
+11. Formularios: validación con zod, mensajes en español
+12. Toasts: usar sonner, mensajes descriptivos en español
+13. Providers anidados: ErrorBoundary > QueryClient > Auth > Authorization > Branch > Tooltip > Router
